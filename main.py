@@ -1,8 +1,10 @@
 import requests
 import os
+import sys
 import time
 from threading import Thread
 from pathlib import Path
+
 
 def descargar_y_guardar_chunk(chunk_url, descargados):
     if chunk_url in descargados:
@@ -36,8 +38,14 @@ def download_all_chunks(m3u8_url, descargados):
         descargar_y_guardar_chunk(chunk_url, descargados)
 
 descargados = set()
-m3u8_url = "https://manifest-gcp-us-east4-vop1.fastly.mux.com/16XvnWEGSOCbwAZ005qCCqEt9ZIbPVA8RX6xLog9en63GB6qlN1hWVxEg002eg8Ak4FqluTR1pVKbv02mm57D011mvhHDFjyXgmY/rendition.m3u8?cdn=fastly&exclude_pdt=false&expires=1760342400&live=1&skid=default&signature=NjhlY2E4MzRfYjk2M2MwYzBjZGMyMzAxMzBhMjg5NWMzYWM4ZmYxMjYzNzg4OWUzMTZhMjQ1ZTYzMDgwNWQ5YjExY2YxZmFlOQ==&vsid=kM3bvM76nYx7jko8Lbb9uqznP3n025UwlaFZvu2AehGG02rI5zThqf02zEF7h4zSiNhMlRABiuqphg"
-save_dir = "Lima Grand Prix 2025/Dia 2/Final/fragments"
+
+if len(sys.argv) != 3:
+    print("Uso del programa: python3 main.py <m3u8_link> <save_dir>")
+    sys.exit(1)
+
+m3u8_url = sys.argv[1]
+save_dir = sys.argv[2] 
+
 poll_interval = 4
 
 os.makedirs(save_dir, exist_ok=True)

@@ -24,26 +24,32 @@ def ejecutar_concat_ffmpeg(list_file_path: str, output_file_path: str):
     subprocess.run(cmd, check=True)
 
 
-def create_temporal_fragments_list(absolute_fragments_dir):
+def create_temporal_fragments_list(absolute_fragments_dir, start: int, end: int):
+    
 
+    print(type(start), type(end))
     ts_files = sorted(absolute_fragments_dir.glob("*.ts"),
                       key=lambda f: int(f.stem))
     list_file = absolute_fragments_dir/ ".ts_list.txt"
 
+    if end == -1:
+        end = len(ts_files)
+
     with open(list_file, "w") as f:
-        for ts in ts_files:
-            f.write(f"file '{ts.resolve()}'\n")
+        for i in range(start, end):
+            f.write(f"file '{ts_files[i].resolve()}'\n")
     return list_file
 
-def concatenar_fragmentos(fragments_dir: str):
+def concatenar_fragmentos(fragments_dir: str, start: int, end: int):
     base_dir = Path(__file__).resolve().parent
     
     absolute_fragments_dir = base_dir / fragments_dir
-
-    list_file = create_temporal_fragments_list(absolute_fragments_dir)
     
+    list_file = create_temporal_fragments_list(absolute_fragments_dir, start, end)
+        
     output_file_path = (base_dir / fragments_dir).parent / "streaming.mp4"
     ejecutar_concat_ffmpeg(list_file, output_file_path)
+    
 
 
 def get_json_ijforg():

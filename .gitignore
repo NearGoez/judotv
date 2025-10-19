@@ -1,0 +1,8 @@
+__pycache__/
+torneos/
+*.pyc
+*.mp4
+*.json
+*.sj
+*.html
+.DS_Store
