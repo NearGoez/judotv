@@ -27,7 +27,15 @@ def websocket_json_parser(data):
     event_clean = event_id.replace("gp_", "").replace("_", " ").title()
     
     # Formato final
-    formatted = f"🏆 {round_desc} {category_long} {white_name} ({white_nation}) vs {blue_name} ({blue_nation}) {event_clean} 🏆"
+    formatted = "🏆 {} {} {} ({}) vs {} ({}) {} 🏆".format(
+        round_desc, 
+        category_long, 
+        white_name, 
+        white_nation, 
+        blue_name, 
+        blue_nation, 
+        event_clean
+    )
     return formatted
 
 async def websocket_judotv():
@@ -92,7 +100,6 @@ def get_highest_res_manifest_from_text(manifest_text: str) -> str:
 
 # URL FUNCTIONS
 
-
 def judotv_contest_information(comp_id: int):
     
     #SACAR HORA ACTUAL EN EL FORMATO HARDCODEADO EN LA URL
@@ -105,8 +112,6 @@ def judotv_fragments_consult(comp_id: int):
     url = f'https://judotv.com/api/v2/competitions/{comp_id}/fragments'
     
     fragments_json = requests.get(url).json
-
-
 
 def judotv_commentator_channels_consult(comp_id: int):
 
