@@ -3,17 +3,14 @@ import subprocess
 from pathlib import Path
 
 def create_temporal_fragments_list(absolute_fragments_dir, start: int, end: int):
-    print(type(start), type(end))
     ts_files = sorted(absolute_fragments_dir.glob("*.ts"),
                       key=lambda f: int(f.stem))
     list_file = absolute_fragments_dir/ ".ts_list.txt"
 
-    if end == -1:
-        end = None
-
     with open(list_file, "w") as f:
-        for i in range(start, end):
-            f.write(f"file '{ts_files[i].resolve()}'\n")
+
+        for ts in ts_files[start:end]:
+            f.write(f"file '{ts.resolve()}'\n")
     return list_file
 
 def ejecutar_concat_ffmpeg(list_file_path: str, output_file_path: str):

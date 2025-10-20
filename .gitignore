@@ -1,8 +1,10 @@
 __pycache__/
 torneos/
+garbage/
 *.pyc
 *.mp4
 *.json
 *.sj
 *.html
+*.txt
 .DS_Store
