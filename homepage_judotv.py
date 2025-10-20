@@ -3,36 +3,69 @@ import asyncio
 import json
 import requests
 from bs4 import BeautifulSoup as bs
-from constants import JUDO_TV_HOME_URL
+from constants import (JUDO_TV_HOME_URL, CHAMPIONSHIP_NAME_H1_CLASS)
 from session_data import cookies, headers
-from utils import (ping_ijforg, get_json_ijforg,
-                   get_fragments_json_ijf, posible_update,
-                   create_fetch, websocket_judotv
+from utils import (websocket_judotv,
+                   ijf_LivePlayback_consult,
+                   stream_mux_consult,
                    )
 from models import Streaming
 
 streaming = Streaming('lima', 1, 2, 'final')
-
 # seteamos el link de live actual en None, porque aun
 # no lo tenemos
-url_live_actual = None
 
-while url_live_actual is None:
+def extract_current_live_url() -> str:
+    current_live_url = None
 
-# HOME PAGE JUDO TV HTML
-    home_html = requests.get(JUDO_TV_HOME_URL).text
-    soup = bs(home_html, 'html.parser')
+    while current_live_url is None:
+    # HOME PAGE JUDO TV HTML
+        home_html = requests.get(JUDO_TV_HOME_URL).text
+        soup = bs(home_html, 'html.parser')
 
-# EXTRAYENNDO LINK DE CAMPEONATO ACTUAL EN DIRECTO
-    href_live_actual = soup.find('a', class_="bg-primary")['href']
-    url_live_actual = JUDO_TV_HOME_URL + href_live_actual
-
-# HTML DEL LIVE DEL TORNEO
-live_html = requests.get(url_live_actual, headers=headers, cookies=cookies)
-soup = bs(live_html.text, 'html.parser')
+    # EXTRAYENNDO LINK DE CAMPEONATO ACTUAL EN DIRECTO
+        href_live_actual = soup.find('a', class_="bg-primary")['href']
+        current_live_url = JUDO_TV_HOME_URL + href_live_actual
+    return current_live_url
 
 
-asyncio.run(websocket_judotv(streaming))
+def inspect_current_live_html(current_live_url):
+    # HTML DE HOMEPAGE DEL LIVE ACTUAL
+    live_homepage_html = requests.get(current_live_url, 
+                                      headers=headers, cookies=cookies)
+    soup = bs(live_homepage_html.text, 'html.parser')
+
+    return soup
+
+def consult_championship_name(current_live_soup) -> str:
+    soup = current_live_soup 
+
+    championship_name = soup.find('h1', class_=CHAMPIONSHIP_NAME_H1_CLASS).text
+    return championship_name
+    
+def consult_current_championship_phase(current_live_soup) -> str:
+    soup = current_live_soup
+
+    championship_phase = soup.find('span', class_='font-bold').text
+    return championship_phase
+
+
+
+current_live_url = extract_current_live_url()
+current_live_html = inspect_current_live_html(current_live_url)
+
+championship_name = consult_championship_name(current_live_html)
+
+print(championship_name)
+
+stream_mux_url = ijf_LivePlayback_consult()
+manifest_hls_url = stream_mux_consult(stream_mux_url)
+
+print(manifest_hls_url)
+
+asyncio.run(websocket_judotv())
+
+
 
 
 

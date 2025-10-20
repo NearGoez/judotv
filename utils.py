@@ -1,198 +1,146 @@
 import os 
 import subprocess
-from pathlib import Path
 import requests
 import websockets
+import json
+import re
+from pathlib import Path
+
+def websocket_json_parser(data):
+    if isinstance(data, str):
+        data = json.loads(data)
+    
+    packet = data.get("packet", {})
+    
+    # Datos básicos
+    round_desc = packet.get("RoundDescription", "")
+    category_long = packet.get("CategoryLong", "")
+    gender = "M" if packet.get("Gender") == "1" else "F"
+    
+    # Nombres y países
+    white_name = packet.get("NameWhiteLong", "").upper()
+    blue_name = packet.get("NameBlueLong", "").upper()
+    white_nation = packet.get("NationWhite", "")
+    blue_nation = packet.get("NationBlue", "")
+    
+    # Evento
+    event_id = packet.get("IDEvent", "")
+    event_clean = event_id.replace("gp_", "").replace("_", " ").title()
+    
+    # Formato final
+    formatted = f"🏆 {round_desc} {category_long} {white_name} ({white_nation}) vs {blue_name} ({blue_nation}) {event_clean} 🏆"
+    return formatted
 
 async def websocket_judotv():
     url = "wss://wsrt.ijf.org/"
     async with websockets.connect(url) as ws:
         print("Conectado")
         async for message in ws:
-            print("Mensaje:", message)
+            print("Mensaje:", websocket_json_parser(message))
 
 
-def ejecutar_concat_ffmpeg(list_file_path: str, output_file_path: str):
-    cmd = [
-        "ffmpeg",
-        "-f", "concat",
-        "-safe", "0",
-        "-i", str(list_file_path),
-        "-c", "copy",
-        str(output_file_path)
-    ]
-    subprocess.run(cmd, check=True)
+def descargar_y_guardar_chunk(chunk_url, descargados, save_dir):
+    if chunk_url in descargados:
+        return
 
+    chunk_filename = chunk_url.split("/")[-1].split(".ts")[0]
+    full_path = os.path.join(save_dir, f"{chunk_filename}.ts")
 
-def create_temporal_fragments_list(absolute_fragments_dir, start: int, end: int):
+    if Path(full_path).exists():
+        descargados.add(chunk_url)
+        return
+
+    print(f"Descargando chunk {chunk_filename}...")
+    chunk_data = requests.get(chunk_url).content
     
+    with open(full_path, "wb") as f:
+        f.write(chunk_data)
 
-    print(type(start), type(end))
-    ts_files = sorted(absolute_fragments_dir.glob("*.ts"),
-                      key=lambda f: int(f.stem))
-    list_file = absolute_fragments_dir/ ".ts_list.txt"
+    print(f"Chunk {chunk_filename} guardado.")
+    descargados.add(chunk_url)
 
-    if end == -1:
-        end = len(ts_files)
+def download_all_chunks(m3u8_url, descargados, save_dir):
+    r = requests.get(m3u8_url)
+    r.raise_for_status()
+    lines = r.text.strip().splitlines()
 
-    with open(list_file, "w") as f:
-        for i in range(start, end):
-            f.write(f"file '{ts_files[i].resolve()}'\n")
-    return list_file
+    # Filtrar líneas que tengan ".ts" en cualquier parte
+    ts_chunks = [line for line in lines if ".ts" in line]
 
-def concatenar_fragmentos(fragments_dir: str, start: int, end: int):
-    base_dir = Path(__file__).resolve().parent
+    for chunk_url in ts_chunks:
+        descargar_y_guardar_chunk(chunk_url, descargados, save_dir)
+
+
     
-    absolute_fragments_dir = base_dir / fragments_dir
+def get_highest_res_manifest_from_text(manifest_text: str) -> str:
+    # Regex: captura ancho, alto y la URL que viene en la siguiente línea
+    pattern = re.compile(
+        r'RESOLUTION=(\d+)x(\d+)[^\n]*\n([^\s#][^\n]*)'
+    )
+
+    matches = pattern.findall(manifest_text)
+    if not matches:
+        raise ValueError("No se encontraron resoluciones en el texto del manifest")
+
+    # Convertimos cada coincidencia a (ancho, alto, url)
+    renditions = [(int(w), int(h), url.strip()) for w, h, url in matches]
+
+    # Elegimos la de mayor resolución (ancho * alto)
+    best = max(renditions, key=lambda x: x[0] * x[1])
+
+    return best[2]
+
+
+# URL FUNCTIONS
+
+
+def judotv_contest_information(comp_id: int):
     
-    list_file = create_temporal_fragments_list(absolute_fragments_dir, start, end)
-        
-    output_file_path = (base_dir / fragments_dir).parent / "streaming.mp4"
-    ejecutar_concat_ffmpeg(list_file, output_file_path)
+    #SACAR HORA ACTUAL EN EL FORMATO HARDCODEADO EN LA URL
+    url = f'https://judotv.com/api/v2/contests?IdCompetition={comp_id}&ForLive=true&Limit=5000&WithEmpty=trueW&WithWinners=false&UpdatedAtMin=2025-10-20T00:47:00'
     
+    contest_information_json = requests.get(url).json()
 
 
-def get_json_ijforg():
+def judotv_fragments_consult(comp_id: int):
+    url = f'https://judotv.com/api/v2/competitions/{comp_id}/fragments'
+    
+    fragments_json = requests.get(url).json
 
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:143.0) Gecko/20100101 Firefox/143.0',
-        'Accept': '*/*',
-        'Accept-Language': 'en-US,en;q=0.5',
-        # 'Accept-Encoding': 'gzip, deflate, br, zstd',
-        'Access-Control-Request-Method': 'GET',
-        'Access-Control-Request-Headers': 'authorization',
-        'Referer': 'https://judotv.com/',
-        'Origin': 'https://judotv.com',
-        'Connection': 'keep-alive',
-        'Sec-Fetch-Dest': 'empty',
-        'Sec-Fetch-Mode': 'cors',
-        'Sec-Fetch-Site': 'cross-site',
-        'Priority': 'u=4',
-        # Requests doesn't support trailers
-        # 'TE': 'trailers',
-    }
 
+
+def judotv_commentator_channels_consult(comp_id: int):
+
+    url = f'https://judotv.com/api/v2/competitions/{comp_id}/commentator-channels'
+    
+    comm_channels_response = requests.get(url).json()
+    print(comm_channels_response)
+
+def ijf_LivePlayback_consult() -> str:
+    url = 'https://datav2.ijf.org/Streams/LivePlaybackUrlForMux'
+    
     params = {
-        '_j': '{"id_competition":3086,"action":"contest.user_votes"}',
-    }
+            'Type': 'commentator',
+            'IdFragment': '3895',
+            'CommentatorIdx': '0',
+            }
+    json_response = requests.get(url, params=params).json()
+    print(json_response, type(json_response))
 
-    response = requests.options('https://data.ijf.org/api/get_json', params=params, headers=headers)
-    return response
+    stream_mux_url = json_response['url']
+    return stream_mux_url
 
-def ping_ijforg():
+def stream_mux_consult(stream_mux_url: str ) -> str:
+    response  = requests.get(stream_mux_url).text
 
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:143.0) Gecko/20100101 Firefox/143.0',
-        'Accept': '*/*',
-        'Accept-Language': 'en-US,en;q=0.5',
-        # 'Accept-Encoding': 'gzip, deflate, br, zstd',
-        'Access-Control-Request-Method': 'POST',
-        'Access-Control-Request-Headers': 'authorization,content-type',
-        'Referer': 'https://judotv.com/',
-        'Origin': 'https://judotv.com',
-        'Connection': 'keep-alive',
-        'Sec-Fetch-Dest': 'empty',
-        'Sec-Fetch-Mode': 'cors',
-        'Sec-Fetch-Site': 'cross-site',
-        'Priority': 'u=4',
-    }
+    highest_res_manifest_url = get_highest_res_manifest_from_text(response)
 
-    response = requests.options('https://datav2.ijf.org/Playbacks/45534168/Ping', headers=headers)
-    
-    return response
+    return highest_res_manifest_url
 
 
 
 
-def get_fragments_json_ijf():
-    cookies = {
-        'theme.selectedColor': 'light',
-        'theme.selectedContrastMode': 'auto',
-        'locale': 'en',
-        'displayAppPopup': 'true',
-        'CookieConsent': '{stamp:%27-1%27%2Cnecessary:true%2Cpreferences:true%2Cstatistics:true%2Cmarketing:true%2Cmethod:%27implied%27%2Cver:1%2Cutc:1760217036342%2Cregion:%27CL%27}',
-        'AccountLoginTokenV2': 'eyJhbGciOiJFUzUxMiIsInR5cCI6IkpXVCJ9.eyJJZFVzZXIiOjExMjM5MTksIkVtYWlsIjoic2x5dGhpbjA3QGdtYWlsLmNvbSIsIk5hbWUiOiJNYXRpID8iLCJEaXNwbGF5TmFtZSI6bnVsbCwiR2VuZGVyIjpudWxsLCJleHAiOjE3NjE1OTk0NTE0NzMsIkxpa2VzSnVkbyI6ZmFsc2UsIkNhbkdldEZiTGlrZXMiOmZhbHNlLCJDYW5HZXRGYkVtYWlsIjpmYWxzZSwiSWRMb2dpbiI6MTM4MTE0MTIsIkdyb3VwcyI6IiIsIlJvbGVzIjoiIiwiQWN0aXZhdGVkIjp0cnVlLCJFbWFpbFZlcmlmaWVkIjp0cnVlfQ.APuPN3aktKQvrFeaAx5dufivqlGVq2QZlg874tn3Ka2t4fHIBZcnyz49KWNDYaMIENrub4LyKTHSE5pHXQrzOX5GAY-Y0TkENa1wjafg37XlK262XINeQnct_2-ObLgnYTh3rJgiRUj2M13fVpHAOSC9Hs0oZRiQ1Y579mdr0Vz3326H',
-        'theme.color': 'light',
-        'theme.contrastMode': 'normal',
-        'muxData': '=undefined&mux_viewer_id=98420ba8-0901-44dd-9f28-7b11d51e9e4a&msn=0.7863692214794965&sid=4470a22e-4b3f-46db-8113-7d9bda6e3f60&sst=1760306282336&sex=1760310289322',
-        'draw.show_scores': 'false',
-        'brackets.zoom': '100',
-    }
-
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:143.0) Gecko/20100101 Firefox/143.0',
-        'Accept': '*/*',
-        'Accept-Language': 'en-US,en;q=0.5',
-        # 'Accept-Encoding': 'gzip, deflate, br, zstd',
-        'Referer': 'https://judotv.com/competitions/gp_per2025/live',
-        'Connection': 'keep-alive',
-        'Sec-Fetch-Dest': 'empty',
-        'Sec-Fetch-Mode': 'cors',
-        'Sec-Fetch-Site': 'same-origin',
-        'If-Modified-Since': 'Sun, 12 Oct 2025 22:38:48 GMT',
-        'If-None-Match': 'W/"JKbPOEtxbj"',
-        'Priority': 'u=4',
-    }
-
-    response = requests.get('https://judotv.com/api/v2/competitions/3086/fragments', cookies=cookies, headers=headers)
-    return response
-
-def posible_update():
-    cookies = {
-        'theme.selectedColor': 'light',
-        'theme.selectedContrastMode': 'auto',
-        'locale': 'en',
-        'displayAppPopup': 'true',
-        'CookieConsent': '{stamp:%27-1%27%2Cnecessary:true%2Cpreferences:true%2Cstatistics:true%2Cmarketing:true%2Cmethod:%27implied%27%2Cver:1%2Cutc:1760217036342%2Cregion:%27CL%27}',
-        'AccountLoginTokenV2': 'eyJhbGciOiJFUzUxMiIsInR5cCI6IkpXVCJ9.eyJJZFVzZXIiOjExMjM5MTksIkVtYWlsIjoic2x5dGhpbjA3QGdtYWlsLmNvbSIsIk5hbWUiOiJNYXRpID8iLCJEaXNwbGF5TmFtZSI6bnVsbCwiR2VuZGVyIjpudWxsLCJleHAiOjE3NjE1OTk0NTE0NzMsIkxpa2VzSnVkbyI6ZmFsc2UsIkNhbkdldEZiTGlrZXMiOmZhbHNlLCJDYW5HZXRGYkVtYWlsIjpmYWxzZSwiSWRMb2dpbiI6MTM4MTE0MTIsIkdyb3VwcyI6IiIsIlJvbGVzIjoiIiwiQWN0aXZhdGVkIjp0cnVlLCJFbWFpbFZlcmlmaWVkIjp0cnVlfQ.APuPN3aktKQvrFeaAx5dufivqlGVq2QZlg874tn3Ka2t4fHIBZcnyz49KWNDYaMIENrub4LyKTHSE5pHXQrzOX5GAY-Y0TkENa1wjafg37XlK262XINeQnct_2-ObLgnYTh3rJgiRUj2M13fVpHAOSC9Hs0oZRiQ1Y579mdr0Vz3326H',
-        'theme.color': 'light',
-        'theme.contrastMode': 'normal',
-        'muxData': '=undefined&mux_viewer_id=98420ba8-0901-44dd-9f28-7b11d51e9e4a&msn=0.7863692214794965&sid=4470a22e-4b3f-46db-8113-7d9bda6e3f60&sst=1760306282336&sex=1760311817625',
-        'draw.show_scores': 'false',
-        'brackets.zoom': '100',
-    }
-
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:143.0) Gecko/20100101 Firefox/143.0',
-        'Accept': '*/*',
-        'Accept-Language': 'en-US,en;q=0.5',
-        # 'Accept-Encoding': 'gzip, deflate, br, zstd',
-        'Connection': 'keep-alive',
-        'Referer': 'https://judotv.com/competitions/gp_per2025/live',
-        # 'Cookie': 'theme.selectedColor=light; theme.selectedContrastMode=auto; locale=en; displayAppPopup=true; CookieConsent={stamp:%27-1%27%2Cnecessary:true%2Cpreferences:true%2Cstatistics:true%2Cmarketing:true%2Cmethod:%27implied%27%2Cver:1%2Cutc:1760217036342%2Cregion:%27CL%27}; AccountLoginTokenV2=eyJhbGciOiJFUzUxMiIsInR5cCI6IkpXVCJ9.eyJJZFVzZXIiOjExMjM5MTksIkVtYWlsIjoic2x5dGhpbjA3QGdtYWlsLmNvbSIsIk5hbWUiOiJNYXRpID8iLCJEaXNwbGF5TmFtZSI6bnVsbCwiR2VuZGVyIjpudWxsLCJleHAiOjE3NjE1OTk0NTE0NzMsIkxpa2VzSnVkbyI6ZmFsc2UsIkNhbkdldEZiTGlrZXMiOmZhbHNlLCJDYW5HZXRGYkVtYWlsIjpmYWxzZSwiSWRMb2dpbiI6MTM4MTE0MTIsIkdyb3VwcyI6IiIsIlJvbGVzIjoiIiwiQWN0aXZhdGVkIjp0cnVlLCJFbWFpbFZlcmlmaWVkIjp0cnVlfQ.APuPN3aktKQvrFeaAx5dufivqlGVq2QZlg874tn3Ka2t4fHIBZcnyz49KWNDYaMIENrub4LyKTHSE5pHXQrzOX5GAY-Y0TkENa1wjafg37XlK262XINeQnct_2-ObLgnYTh3rJgiRUj2M13fVpHAOSC9Hs0oZRiQ1Y579mdr0Vz3326H; theme.color=light; theme.contrastMode=normal; muxData==undefined&mux_viewer_id=98420ba8-0901-44dd-9f28-7b11d51e9e4a&msn=0.7863692214794965&sid=4470a22e-4b3f-46db-8113-7d9bda6e3f60&sst=1760306282336&sex=1760311817625; draw.show_scores=false; brackets.zoom=100',
-        'Sec-Fetch-Dest': 'script',
-        'Sec-Fetch-Mode': 'cors',
-        'Sec-Fetch-Site': 'same-origin',
-        'If-None-Match': 'W/"a071605efcda6af25b43cf329a0a7007"',
-        'Priority': 'u=1',
-        # Requests doesn't support trailers
-        # 'TE': 'trailers',
-    }
-
-    response = requests.get('https://judotv.com/judo_tv/DFS9jmYK.js', cookies=cookies, headers=headers)
-    return response
 
 
 
-def create_fetch():
-
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:143.0) Gecko/20100101 Firefox/143.0',
-        'Accept': '*/*',
-        'Accept-Language': 'en-US,en;q=0.5',
-        # 'Accept-Encoding': 'gzip, deflate, br, zstd',
-        'Access-Control-Request-Method': 'POST',
-        'Access-Control-Request-Headers': 'authorization,content-type,user-agent',
-        'Referer': 'https://judotv.com/',
-        'Origin': 'https://judotv.com',
-        'Connection': 'keep-alive',
-        'Sec-Fetch-Dest': 'empty',
-        'Sec-Fetch-Mode': 'cors',
-        'Sec-Fetch-Site': 'cross-site',
-        'Priority': 'u=4',
-        # Requests doesn't support trailers
-        # 'TE': 'trailers',
-    }
-
-    response = requests.options('https://datav2.ijf.org/Playbacks/Create', headers=headers)
 
