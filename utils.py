@@ -45,59 +45,6 @@ async def websocket_judotv():
         async for message in ws:
             print("Mensaje:", websocket_json_parser(message))
 
-
-def descargar_y_guardar_chunk(chunk_url, descargados, save_dir):
-    if chunk_url in descargados:
-        return
-
-    chunk_filename = chunk_url.split("/")[-1].split(".ts")[0]
-    full_path = os.path.join(save_dir, f"{chunk_filename}.ts")
-
-    if Path(full_path).exists():
-        descargados.add(chunk_url)
-        return
-
-    print(f"Descargando chunk {chunk_filename}...")
-    chunk_data = requests.get(chunk_url).content
-    
-    with open(full_path, "wb") as f:
-        f.write(chunk_data)
-
-    print(f"Chunk {chunk_filename} guardado.")
-    descargados.add(chunk_url)
-
-def download_all_chunks(m3u8_url, descargados, save_dir):
-    r = requests.get(m3u8_url)
-    r.raise_for_status()
-    lines = r.text.strip().splitlines()
-
-    # Filtrar líneas que tengan ".ts" en cualquier parte
-    ts_chunks = [line for line in lines if ".ts" in line]
-
-    for chunk_url in ts_chunks:
-        descargar_y_guardar_chunk(chunk_url, descargados, save_dir)
-
-
-    
-def get_highest_res_manifest_from_text(manifest_text: str) -> str:
-    # Regex: captura ancho, alto y la URL que viene en la siguiente línea
-    pattern = re.compile(
-        r'RESOLUTION=(\d+)x(\d+)[^\n]*\n([^\s#][^\n]*)'
-    )
-
-    matches = pattern.findall(manifest_text)
-    if not matches:
-        raise ValueError("No se encontraron resoluciones en el texto del manifest")
-
-    # Convertimos cada coincidencia a (ancho, alto, url)
-    renditions = [(int(w), int(h), url.strip()) for w, h, url in matches]
-
-    # Elegimos la de mayor resolución (ancho * alto)
-    best = max(renditions, key=lambda x: x[0] * x[1])
-
-    return best[2]
-
-
 # URL FUNCTIONS
 
 def judotv_contest_information(comp_id: int):
@@ -113,6 +60,10 @@ def judotv_fragments_consult(comp_id: int):
     
     fragments_json = requests.get(url).json
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> 1fc0481 ( Class Mat, Championship & Round added, 20% implemented)
 def judotv_commentator_channels_consult(comp_id: int):
 
     url = f'https://judotv.com/api/v2/competitions/{comp_id}/commentator-channels'
@@ -120,26 +71,7 @@ def judotv_commentator_channels_consult(comp_id: int):
     comm_channels_response = requests.get(url).json()
     print(comm_channels_response)
 
-def ijf_LivePlayback_consult() -> str:
-    url = 'https://datav2.ijf.org/Streams/LivePlaybackUrlForMux'
-    
-    params = {
-            'Type': 'commentator',
-            'IdFragment': '3895',
-            'CommentatorIdx': '0',
-            }
-    json_response = requests.get(url, params=params).json()
-    print(json_response, type(json_response))
 
-    stream_mux_url = json_response['url']
-    return stream_mux_url
-
-def stream_mux_consult(stream_mux_url: str ) -> str:
-    response  = requests.get(stream_mux_url).text
-
-    highest_res_manifest_url = get_highest_res_manifest_from_text(response)
-
-    return highest_res_manifest_url
 
 
 
