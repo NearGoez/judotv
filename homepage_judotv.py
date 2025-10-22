@@ -7,7 +7,7 @@ from constants import (JUDO_TV_HOME_URL, CHAMPIONSHIP_NAME_H1_CLASS)
 from session_data import cookies, headers
 from utils import (websocket_judotv,
                    ijf_LivePlayback_consult,
-                   stream_mux_consult,
+                   stream_mux_consult, consult_championship_name, 
                    )
 from models import Streaming
 
