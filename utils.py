@@ -171,6 +171,26 @@ def calculate_current_championship_day(fragment_json: dict,
 
     return diff.days + 1
     
+def resume_competition_streamings(championship_fragments):
+    championship_name = championship_fragments[0]['competition']['name']
+    championship_start_date = championship_fragments[0]['competition']['dateFrom']
+
+    for fragment in championship_fragments:
+        current_day = calculate_current_championship_day(fragment,
+                                                        championship_start_date)
+
+        title_fragment = fragment['title']
+
+        if len(fragment["fragmentMats"]) == 1:
+            print(f'{championship_name} Day {current_day}'
+                f' {title_fragment}')
+            continue
+
+        for mat in fragment['fragmentMats']:
+            print(f'{championship_name} Day {current_day}'
+                f' {title_fragment} Mat {mat["mat"]}')
+
+
 def resume_contest_json(contest_json: dict) -> str:
     pass
 
