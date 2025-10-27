@@ -2,8 +2,9 @@ import requests
 import os
 import re
 from pathlib import Path
+from typing import Any
 
-def descargar_y_guardar_chunk(chunk_url, descargados, save_dir):
+def descargar_y_guardar_chunk(chunk_url: str, descargados: set[str], save_dir: str):
     if chunk_url in descargados:
         return
 
@@ -52,16 +53,16 @@ def get_highest_res_manifest_from_text(manifest_text: str) -> str:
 
     return best[2]
 
-def ijf_LivePlayback_consult(id_fragment, comm_id) -> str:
+def ijf_LivePlayback_consult(id_fragment: int, comm_id: int) -> str:
     url = 'https://datav2.ijf.org/Streams/LivePlaybackUrlForMux'
     
-    params = {
+    params: dict[str, Any] = {
             'Type': 'commentator',
             'IdFragment': id_fragment,
             'CommentatorIdx': comm_id,
             }
     json_response = requests.get(url, params=params).json()
-    print(json_response, type(json_response))
+
 
     stream_mux_url = json_response['url']
     return stream_mux_url

@@ -7,6 +7,7 @@ import re
 from pathlib import Path
 from bs4 import BeautifulSoup as bs
 from constants import CHAMPIONSHIP_NAME_H1_CLASS
+from m3u8 import get_highest_res_manifest_from_text
 
 def websocket_json_parser(data):
     if isinstance(data, str):
@@ -189,6 +190,14 @@ def resume_competition_streamings(championship_fragments):
         for mat in fragment['fragmentMats']:
             print(f'{championship_name} Day {current_day}'
                 f' {title_fragment} Mat {mat["mat"]}')
+
+def stream_mux_consult(stream_mux_url: str ) -> str:
+    response  = requests.get(stream_mux_url).text
+
+    highest_res_manifest_url = get_highest_res_manifest_from_text(response)
+
+    return highest_res_manifest_url
+
 
 
 def resume_contest_json(contest_json: dict) -> str:

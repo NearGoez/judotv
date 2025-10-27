@@ -4,7 +4,7 @@ import sys
 import time
 from threading import Thread
 from pathlib import Path
-from utils import download_all_chunks
+from m3u8 import download_all_chunks
 
 descargados = set()
 
