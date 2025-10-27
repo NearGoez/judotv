@@ -1,37 +1,36 @@
 import requests
-import regex as re
-from bs4 import BeautifulSoup as bs
-from session_data import (cookies, headers)
-import json
-from utils import(parse_championship_id, get_championship_comms_channels,
-                  get_championship_contest_information, 
-                  get_championship_fragments, 
-                  websocket_json_parser, calculate_current_championship_day, 
-                  parse_current_championship_json, parse_start_date,
-                  parse_championship_data, get_competition_json, 
-                  parse_competition_id, parse_competition_start_date, 
-                  consult_championship_name, resume_competition_streamings)
+import os
+import sys
+import time
+from threading import Thread
+from pathlib import Path
+from m3u8 import download_all_chunks
 
-championship_name = "Guadalajara Grand Prix 2025"
+descargados = set()
 
-judo_mex_gp_url = "https://judotv.com/competitions/gp_mex2025/overview"
+if len(sys.argv) != 3:
+    print("Uso del programa: python3 main.py <m3u8_link> <save_dir>")
+    sys.exit(1)
 
-championship_overview_html = requests.get(judo_mex_gp_url, 
-                                    cookies=cookies, headers=headers).text
+m3u8_url = sys.argv[1]
+save_dir = sys.argv[2] 
 
-soup = bs(championship_overview_html, "html.parser")
+poll_interval = 4
 
-competition_json = get_competition_json(championship_name) 
+os.makedirs(save_dir, exist_ok=True)
 
-championship_id = parse_competition_id(competition_json)
+while True:
+    try:
+        r = requests.get(m3u8_url)
+        r.raise_for_status()
+        lines = r.text.strip().splitlines()
 
-championship_start_date = parse_competition_start_date(competition_json) 
+        # Filtrar líneas que tengan ".ts" en cualquier parte
+        ts_chunks = [line for line in lines if ".ts" in line]
 
-#comms_channels = get_championship_comms_channels(championship_id)
+        download_all_chunks(m3u8_url, descargados, save_dir)
+        time.sleep(poll_interval)
 
-all_championship_contests = get_championship_contest_information(championship_id)
-
-championship_fragments = get_championship_fragments(championship_id)
-
-resume_competition_streamings(championship_fragments)
-    
+    except Exception as e:
+        print("Error:", e)
+    time.sleep(poll_interval)
